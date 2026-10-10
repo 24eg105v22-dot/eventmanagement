@@ -9,9 +9,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
     private final AuthService authService;
 
@@ -27,6 +28,11 @@ public class AuthController {
     public AuthResponse login(@RequestBody LoginRequest request) {
         User user = authService.authenticate(request.email(), request.password());
         return new AuthResponse(authService.tokenFor(user), user.getName(), user.getEmail());
+    }
+
+    @GetMapping("/health")
+    public Map<String, String> health() {
+        return Map.of("status", "ok");
     }
 
     public record RegisterRequest(@NotBlank String name, @Email @NotBlank String email, @Size(min = 8) String password) {}

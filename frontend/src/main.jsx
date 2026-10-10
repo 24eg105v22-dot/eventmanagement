@@ -6,7 +6,8 @@ const emptyEvent = { name: "", description: "", date: "", time: "", location: ""
 
 async function request(url, options = {}) {
   const token = localStorage.getItem("gatherly_token");
-  const response = await fetch(url, {
+  const apiBaseUrl = import.meta.env.VITE_API_URL || "";
+  const response = await fetch(`${apiBaseUrl}${url}`, {
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...options
   });

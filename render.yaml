@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: event-management-backend
+    runtime: docker
+    rootDir: event-management-system
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/auth/health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_DRIVER
+        value: com.mysql.cj.jdbc.Driver
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
