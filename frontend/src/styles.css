@@ -43,7 +43,7 @@ nav button:hover, nav button.active { color: #554ddf; background: #f0efff; }
   .app-shell { display: block; width: 100%; min-width: 0; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
   .sidebar { position: fixed; z-index: 10; bottom: 0; left: 0; width: 100%; height: calc(68px + env(safe-area-inset-bottom)); padding: 6px 10px env(safe-area-inset-bottom); border-right: 0; border-top: 1px solid #ecebf2; box-shadow: 0 -8px 24px #1e1c2f0d; }
   .brand, .sidebar-footer { display: none; }
-  .sidebar nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; height: 100%; }
+  .sidebar nav { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; height: 100%; }
   .sidebar nav button, .sidebar nav button.active { justify-content: center; flex-direction: column; gap: 4px; padding: 7px 3px; border-radius: 10px; font-size: 10px; }
   .sidebar nav button svg { width: 20px; height: 20px; }
   .nav-count { position: absolute; margin: -28px 0 0 28px; padding: 2px 6px; font-size: 9px; }
