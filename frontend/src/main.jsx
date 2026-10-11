@@ -50,7 +50,7 @@ function Layout({ page, setPage, events, error, loadEvents, user, logout, childr
       <div className="sidebar-footer"><div className="avatar">{user?.name?.slice(0, 2).toUpperCase() || "EM"}</div><div><strong>{user?.name || "Event Manager"}</strong><small>{user?.email || "Workspace"}</small></div><button className="logout" onClick={logout}>Log out</button></div>
     </aside>
     <main className="content">
-      <header className="topbar"><div><p className="crumb">Workspace / {page === "overview" ? "Overview" : page === "events" ? "All events" : "Create event"}</p><h1>{page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : "Create something memorable"} <span>✦</span></h1></div><div className="status"><span className="status-dot" /> All systems operational</div></header>
+      <header className="topbar"><div><p className="crumb">Workspace / {page === "overview" ? "Overview" : page === "events" ? "All events" : "Create event"}</p><h1>{page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : "Create something memorable"} <span>✦</span></h1></div><div className="topbar-actions"><div className="status"><span className="status-dot" /> All systems operational</div><button className="mobile-logout" onClick={logout}>Log out</button></div></header>
       {error && <div className="error"><strong>Something went wrong.</strong> {error}<button onClick={loadEvents}>Retry</button></div>}
       {children}
       <footer>Gatherly <span>·</span> Make room for what matters.</footer>
