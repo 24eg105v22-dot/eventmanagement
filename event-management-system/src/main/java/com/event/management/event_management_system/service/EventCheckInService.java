@@ -5,6 +5,7 @@ import com.event.management.event_management_system.entity.EventCheckIn;
 import com.event.management.event_management_system.entity.User;
 import com.event.management.event_management_system.repository.EventCheckInRepository;
 import com.event.management.event_management_system.repository.EventRepository;
+import com.event.management.event_management_system.repository.EventRegistrationRepository;
 import com.event.management.event_management_system.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
@@ -15,12 +16,14 @@ public class EventCheckInService {
     private final EventRepository eventRepository;
     private final EventCheckInRepository checkInRepository;
     private final UserRepository userRepository;
+    private final EventRegistrationRepository registrationRepository;
 
     public EventCheckInService(EventRepository eventRepository, EventCheckInRepository checkInRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository, EventRegistrationRepository registrationRepository) {
         this.eventRepository = eventRepository;
         this.checkInRepository = checkInRepository;
         this.userRepository = userRepository;
+        this.registrationRepository = registrationRepository;
     }
 
     public CheckInSummary summary(Long eventId, String email) {
@@ -56,6 +59,21 @@ public class EventCheckInService {
                 .orElseThrow(() -> new IllegalArgumentException("Attendee account not found."));
         checkInRepository.findByEventIdAndUserEmailIgnoreCase(eventId, attendeeEmail)
                 .orElseGet(() -> checkInRepository.save(new EventCheckIn(event, attendee)));
+        return summary(eventId, ownerEmail);
+    }
+
+    public CheckInSummary checkInTicket(Long eventId, Long registrationId, String ownerEmail) {
+        Event event = event(eventId);
+        requireOwner(event, ownerEmail);
+        var registration = registrationRepository.findByIdAndEventId(registrationId, eventId)
+                .orElseThrow(() -> new IllegalArgumentException("This ticket does not belong to the event."));
+        if (registration.getStatus() != com.event.management.event_management_system.entity.EventRegistration.Status.CONFIRMED) {
+            throw new IllegalArgumentException("This ticket is not confirmed for entry.");
+        }
+        if (checkInRepository.findByEventIdAndUserEmailIgnoreCase(eventId, registration.getAttendee().getEmail()).isPresent()) {
+            throw new IllegalArgumentException("This ticket has already been checked in.");
+        }
+        checkInRepository.save(new EventCheckIn(event, registration.getAttendee()));
         return summary(eventId, ownerEmail);
     }
 

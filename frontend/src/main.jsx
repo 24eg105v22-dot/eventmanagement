@@ -17,26 +17,22 @@ async function request(url, options = {}) {
     throw new Error(body.error || "The request could not be completed.");
   }
 
-  function TicketQr({ registrationId }) {
-    const [src, setSrc] = useState("");
-    useEffect(() => {
-      QRCode.toDataURL(`${window.location.origin}/#ticket-${registrationId}`, { width: 140, margin: 1 }).then(setSrc);
-    }, [registrationId]);
-    return src ? <img src={src} alt="Ticket QR code" /> : <span className="qr-loading">Preparing QR...</span>;
-  }
-
-  function MyTickets({ tickets, loading, openEvent }) {
-    return <section className="tickets-panel panel page-card">
-      <div className="panel-heading"><div><p className="eyebrow">YOUR PASSES</p><h2>My tickets</h2><p>Keep every registration ready for the event day.</p></div></div>
-      {loading ? <div className="empty"><p>Loading your tickets...</p></div> : tickets.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="ticket" /></div><h3>No tickets yet</h3><p>Register for a public event and it will appear here.</p></div> : <div className="ticket-list">{tickets.map((ticket) => {
-        return <article className="ticket-card" key={ticket.registrationId}>
-          <div className="ticket-info"><p className="eyebrow">{ticket.status === "CONFIRMED" ? "CONFIRMED TICKET" : "PAYMENT PENDING"}</p><h3>{ticket.eventName}</h3><p>{formatDate(ticket.date)} at {ticket.time} · {ticket.location}</p><strong>{Number(ticket.ticketPrice || 0) === 0 ? "Free ticket" : `₹${Number(ticket.ticketPrice).toFixed(2)} paid ticket`}</strong><button className="secondary-action" onClick={() => openEvent(ticket.eventId)}>View event <Icon name="arrow" /></button></div>
-          <div className="ticket-qr"><TicketQr registrationId={ticket.registrationId} /><small>Show this QR at check-in</small></div>
-        </article>;
-      })}</div>}
-    </section>;
-  }
   return response.status === 204 ? null : response.json();
+}
+
+function TicketQr({ registrationId }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    QRCode.toDataURL(`${window.location.origin}/#ticket-${registrationId}`, { width: 140, margin: 1 }).then(setSrc);
+  }, [registrationId]);
+  return src ? <img src={src} alt="Ticket QR code" /> : <span className="qr-loading">Preparing QR...</span>;
+}
+
+function MyTickets({ tickets, loading, openEvent }) {
+  return <section className="tickets-panel panel page-card">
+    <div className="panel-heading"><div><p className="eyebrow">YOUR PASSES</p><h2>My tickets</h2><p>Keep every registration ready for the event day.</p></div></div>
+    {loading ? <div className="empty"><p>Loading your tickets...</p></div> : tickets.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="ticket" /></div><h3>No tickets yet</h3><p>Register for a public event and it will appear here.</p></div> : <div className="ticket-list">{tickets.map((ticket) => <article className="ticket-card" key={ticket.registrationId}><div className="ticket-info"><p className="eyebrow">{ticket.status === "CONFIRMED" ? "CONFIRMED TICKET" : "PAYMENT PENDING"}</p><h3>{ticket.eventName}</h3><p>{formatDate(ticket.date)} at {ticket.time} · {ticket.location}</p><strong>{Number(ticket.ticketPrice || 0) === 0 ? "Free ticket" : `₹${Number(ticket.ticketPrice).toFixed(2)} paid ticket`}</strong><button className="secondary-action" onClick={() => openEvent(ticket.eventId)}>View event <Icon name="arrow" /></button></div><div className="ticket-qr"><TicketQr registrationId={ticket.registrationId} /><small>Show this QR at check-in</small></div></article>)}</div>}
+  </section>;
 }
 
 function Icon({ name }) {
@@ -151,6 +147,7 @@ function EventDetails({ event, goBack, updateRsvp }) {
   const [registrations, setRegistrations] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [qrCode, setQrCode] = useState("");
+  const [ticketCode, setTicketCode] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => []), request(`/api/events/${event.id}/check-in`), request(`/api/events/${event.id}/check-in/attendees`).catch(() => []), request(`/api/events/${event.id}/registrations`).catch(() => []), request(`/api/events/${event.id}/registrations/analytics`).catch(() => null)])
@@ -174,6 +171,15 @@ function EventDetails({ event, goBack, updateRsvp }) {
     try {
       setCheckIn(await request(`/api/events/${event.id}/check-in/attendees`, { method: "POST", body: JSON.stringify({ email }) }));
       setCheckedInAttendees(await request(`/api/events/${event.id}/check-in/attendees`));
+    } catch (err) { setError(err.message); }
+  };
+  const checkInTicket = async () => {
+    const match = ticketCode.trim().match(/ticket-(\d+)/i);
+    if (!match) { setError("Enter or scan a valid Gatherly ticket QR value."); return; }
+    try {
+      setCheckIn(await request(`/api/events/${event.id}/check-in/ticket`, { method: "POST", body: JSON.stringify({ registrationId: Number(match[1]) }) }));
+      setTicketCode("");
+      setError("");
     } catch (err) { setError(err.message); }
   };
   const register = async () => {
@@ -213,7 +219,7 @@ function EventDetails({ event, goBack, updateRsvp }) {
     {error && <div className="error">{error}</div>}
     <div className="rsvp-card registration-card"><div><strong>{Number(event.ticketPrice || 0) === 0 ? "Free registration" : `₹${Number(event.ticketPrice).toFixed(2)} registration`}</strong><p>{registration?.error || `${registration?.registered || 0} of ${event.capacity || "limited"} spots registered`}</p></div><button className="primary" onClick={register}>{registration?.status === "CONFIRMED" ? "Registered" : Number(event.ticketPrice || 0) === 0 ? "Register now" : "Start payment"}</button></div>
     <div className="rsvp-card"><div><strong>RSVP</strong><p>{summary?.attending || 0} attending · {summary?.declined || 0} declined</p></div><div className="rsvp-actions"><button className={summary?.currentUserStatus === "ATTENDING" ? "rsvp active" : "rsvp"} onClick={() => respond("ATTENDING")}>I’m attending</button><button className={summary?.currentUserStatus === "DECLINED" ? "rsvp declined active" : "rsvp declined"} onClick={() => respond("DECLINED")}>Can’t attend</button></div></div>
-    <div className="checkin-card"><div><h3>Event check-in</h3><p>{checkIn?.checkedIn || 0} people checked in</p><button className={checkIn?.currentUserCheckedIn ? "rsvp active" : "rsvp"} onClick={selfCheckIn}>{checkIn?.currentUserCheckedIn ? "Checked in" : "Check myself in"}</button></div>{qrCode && <div className="qr-code"><img src={qrCode} alt={`QR code for ${event.name}`} /><small>Scan to open this event</small></div>}</div>
+    <div className="checkin-card"><div><h3>Event check-in</h3><p>{checkIn?.checkedIn || 0} people checked in</p><button className={checkIn?.currentUserCheckedIn ? "rsvp active" : "rsvp"} onClick={selfCheckIn}>{checkIn?.currentUserCheckedIn ? "Checked in" : "Check myself in"}</button>{summary?.owner && <div className="ticket-checkin"><input placeholder="Paste ticket QR value" value={ticketCode} onChange={(event) => setTicketCode(event.target.value)} /><button className="primary small" onClick={checkInTicket}>Verify ticket</button></div>}</div>{qrCode && <div className="qr-code"><img src={qrCode} alt={`QR code for ${event.name}`} /><small>Scan to open this event</small></div>}</div>
     {summary?.owner && <div className="attendee-list"><div className="panel-heading"><h3>Registrations</h3><button className="secondary-action" onClick={async () => { const response = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/events/${event.id}/registrations/export`, { headers: { Authorization: `Bearer ${localStorage.getItem("gatherly_token")}` } }); const blob = await response.blob(); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `event-${event.id}-registrations.csv`; link.click(); URL.revokeObjectURL(link.href); }}>Export CSV</button></div>{analytics && <div className="analytics-row"><span><strong>{analytics.confirmed}</strong> confirmed</span><span><strong>{analytics.pending}</strong> pending</span><span><strong>{analytics.remaining}</strong> seats left</span><span><strong>₹{Number(analytics.revenue || 0).toFixed(2)}</strong> revenue</span></div>}{registrations.length === 0 ? <p className="muted">No registrations yet.</p> : registrations.map((attendee) => <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{attendee.status === "CONFIRMED" ? "Registered" : "Payment pending"}</em></div>)}</div>}
   </section>;
 }

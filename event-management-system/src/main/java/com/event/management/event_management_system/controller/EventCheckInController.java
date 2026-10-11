@@ -41,5 +41,13 @@ public class EventCheckInController {
         return checkInService.checkInAttendee(eventId, request.email(), user.getUsername());
     }
 
+    @PostMapping("/ticket")
+    public EventCheckInService.CheckInSummary checkInTicket(@PathVariable Long eventId,
+                                                             @RequestBody TicketRequest request,
+                                                             @AuthenticationPrincipal UserDetails user) {
+        return checkInService.checkInTicket(eventId, request.registrationId(), user.getUsername());
+    }
+
     public record CheckInRequest(String email) {}
+    public record TicketRequest(Long registrationId) {}
 }
