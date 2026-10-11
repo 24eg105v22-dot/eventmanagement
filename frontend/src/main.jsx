@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import QRCode from "qrcode";
 import "./styles.css";
 
 const emptyEvent = { name: "", description: "", date: "", time: "", location: "" };
@@ -91,11 +92,16 @@ function EventList({ events, loading, edit, remove, openDetails }) {
 function EventDetails({ event, goBack, updateRsvp }) {
   const [summary, setSummary] = useState(null);
   const [attendees, setAttendees] = useState([]);
+  const [checkIn, setCheckIn] = useState(null);
+  const [checkedInAttendees, setCheckedInAttendees] = useState([]);
+  const [qrCode, setQrCode] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => [])])
-      .then(([nextSummary, nextAttendees]) => { setSummary(nextSummary); setAttendees(nextAttendees); })
+    Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => []), request(`/api/events/${event.id}/check-in`), request(`/api/events/${event.id}/check-in/attendees`).catch(() => [])])
+      .then(([nextSummary, nextAttendees, nextCheckIn, nextCheckedIn]) => { setSummary(nextSummary); setAttendees(nextAttendees); setCheckIn(nextCheckIn); setCheckedInAttendees(nextCheckedIn); })
       .catch((err) => setError(err.message));
+    QRCode.toDataURL(`${window.location.origin}/#event-${event.id}`, { width: 220, margin: 2 })
+      .then(setQrCode).catch(() => setError("Could not generate the event QR code."));
   }, [event.id]);
   const respond = async (status) => {
     try {
@@ -104,13 +110,24 @@ function EventDetails({ event, goBack, updateRsvp }) {
       if (nextSummary.owner) setAttendees(await request(`/api/events/${event.id}/rsvp/attendees`));
     } catch (err) { setError(err.message); }
   };
+  const selfCheckIn = async () => {
+    try { setCheckIn(await request(`/api/events/${event.id}/check-in`, { method: "POST" })); }
+    catch (err) { setError(err.message); }
+  };
+  const checkInAttendee = async (email) => {
+    try {
+      setCheckIn(await request(`/api/events/${event.id}/check-in/attendees`, { method: "POST", body: JSON.stringify({ email }) }));
+      setCheckedInAttendees(await request(`/api/events/${event.id}/check-in/attendees`));
+    } catch (err) { setError(err.message); }
+  };
   return <section className="details-panel panel page-card">
     <button className="back-link" onClick={goBack}>← Back to all events</button>
     <div className="details-heading"><div><p className="eyebrow">EVENT DETAILS</p><h2>{event.name}</h2><p>{formatDate(event.date)} at {event.time} · {event.location}</p></div><span className="form-spark">✦</span></div>
     {event.description && <p className="details-description">{event.description}</p>}
     {error && <div className="error">{error}</div>}
     <div className="rsvp-card"><div><strong>RSVP</strong><p>{summary?.attending || 0} attending · {summary?.declined || 0} declined</p></div><div className="rsvp-actions"><button className={summary?.currentUserStatus === "ATTENDING" ? "rsvp active" : "rsvp"} onClick={() => respond("ATTENDING")}>I’m attending</button><button className={summary?.currentUserStatus === "DECLINED" ? "rsvp declined active" : "rsvp declined"} onClick={() => respond("DECLINED")}>Can’t attend</button></div></div>
-    {summary?.owner && <div className="attendee-list"><h3>Attendees</h3>{attendees.length === 0 ? <p className="muted">No responses yet.</p> : attendees.map((attendee) => <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{attendee.status === "ATTENDING" ? "Attending" : "Declined"}</em></div>)}</div>}
+    <div className="checkin-card"><div><h3>Event check-in</h3><p>{checkIn?.checkedIn || 0} people checked in</p><button className={checkIn?.currentUserCheckedIn ? "rsvp active" : "rsvp"} onClick={selfCheckIn}>{checkIn?.currentUserCheckedIn ? "Checked in" : "Check myself in"}</button></div>{qrCode && <div className="qr-code"><img src={qrCode} alt={`QR code for ${event.name}`} /><small>Scan to open this event</small></div>}</div>
+    {summary?.owner && <div className="attendee-list"><h3>Attendees</h3>{attendees.length === 0 ? <p className="muted">No responses yet.</p> : attendees.map((attendee) => { const isCheckedIn = checkedInAttendees.some((checkedIn) => checkedIn.email === attendee.email); return <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{isCheckedIn ? "Checked in" : attendee.status === "ATTENDING" ? "Attending" : "Declined"}</em>{!isCheckedIn && attendee.status === "ATTENDING" && <button className="checkin-button" onClick={() => checkInAttendee(attendee.email)}>Check in</button>}</div>; })}</div>}
   </section>;
 }
 
