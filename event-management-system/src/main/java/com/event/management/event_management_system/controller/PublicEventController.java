@@ -28,10 +28,11 @@ public class PublicEventController {
         return PublicEvent.from(eventService.getEventForViewing(id));
     }
 
-    public record PublicEvent(Long id, String name, String description, String date, String time, String location) {
+    public record PublicEvent(Long id, String name, String description, String date, String time, String location,
+                              java.math.BigDecimal ticketPrice, Integer capacity) {
         static PublicEvent from(Event event) {
             return new PublicEvent(event.getId(), event.getName(), event.getDescription(), event.getDate(),
-                    event.getTime(), event.getLocation());
+                    event.getTime(), event.getLocation(), event.getTicketPrice(), event.getCapacity());
         }
     }
 }

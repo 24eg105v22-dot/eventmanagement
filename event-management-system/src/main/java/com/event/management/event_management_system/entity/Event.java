@@ -7,6 +7,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.ManyToOne;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "events")
@@ -29,6 +33,12 @@ public class Event {
 
     @NotBlank
     private String location;
+
+    @DecimalMin(value = "0.0", inclusive = true)
+    private BigDecimal ticketPrice = BigDecimal.ZERO;
+
+    @Min(1)
+    private Integer capacity = 100;
 
     @ManyToOne
     private User owner;
@@ -87,6 +97,11 @@ public class Event {
     public void setLocation(String location) {
         this.location = location;
     }
+
+    public BigDecimal getTicketPrice() { return ticketPrice; }
+    public void setTicketPrice(BigDecimal ticketPrice) { this.ticketPrice = ticketPrice; }
+    public Integer getCapacity() { return capacity; }
+    public void setCapacity(Integer capacity) { this.capacity = capacity; }
 
     public User getOwner() {
         return owner;

@@ -49,6 +49,8 @@ public class EventService {
         existingEvent.setDate(event.getDate());
         existingEvent.setTime(event.getTime());
         existingEvent.setLocation(event.getLocation());
+        existingEvent.setTicketPrice(event.getTicketPrice());
+        existingEvent.setCapacity(event.getCapacity());
         return eventRepository.save(existingEvent);
     }
 

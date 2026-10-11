@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import QRCode from "qrcode";
 import "./styles.css";
 
-const emptyEvent = { name: "", description: "", date: "", time: "", location: "" };
+const emptyEvent = { name: "", description: "", date: "", time: "", location: "", ticketPrice: "0", capacity: "100" };
 
 async function request(url, options = {}) {
   const token = localStorage.getItem("gatherly_token");
@@ -69,6 +69,7 @@ function EventForm({ form, setForm, editingId, submit, cancel }) {
     <label>Description <span className="optional">Optional</span><textarea placeholder="What is this event about?" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
     <div className="form-row"><label>Date<input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label><label>Time<input required type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label></div>
     <label>Location<input required placeholder="e.g. The Grand Hall" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
+    <div className="form-row"><label>Ticket price (INR)<input required min="0" step="0.01" type="number" value={form.ticketPrice} onChange={(e) => setForm({ ...form, ticketPrice: e.target.value })} /></label><label>Capacity<input required min="1" type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} /></label></div>
     <button className="primary submit" type="submit"><Icon name={editingId ? "edit" : "plus"} /> {editingId ? "Save changes" : "Add event"}</button>
     {editingId && <button className="cancel" type="button" onClick={cancel}>Cancel editing</button>}
   </form>;
@@ -104,7 +105,8 @@ function PublicEvents({ events, loading, openDetails, openLogin }) {
 }
 
 function PublicEventDetails({ event, openLogin, goBack }) {
-  return <main className="public-shell"><header className="public-header"><button className="brand" onClick={goBack}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button><button className="primary public-cta" onClick={() => openLogin("register")}>Register to attend</button></header><section className="public-detail panel"><button className="back-link" onClick={goBack}>← Back to events</button><p className="eyebrow">EVENT DETAILS</p><h1>{event.name}</h1><p className="public-detail-meta"><Icon name="calendar" /> {formatDate(event.date)} at {event.time} <span>·</span> <Icon name="location" /> {event.location}</p>{event.description && <p className="details-description">{event.description}</p>}<div className="public-register-box"><div><h2>Want to attend?</h2><p>Create an account to register and receive event updates.</p></div><button className="primary" onClick={() => openLogin("register")}>Register now <Icon name="arrow" /></button></div></section><footer>Gatherly <span>·</span> Make room for what matters.</footer></main>;
+  const price = Number(event.ticketPrice || 0);
+  return <main className="public-shell"><header className="public-header"><button className="brand" onClick={goBack}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button><button className="primary public-cta" onClick={() => openLogin("register")}>Register to attend</button></header><section className="public-detail panel"><button className="back-link" onClick={goBack}>← Back to events</button><p className="eyebrow">EVENT DETAILS</p><h1>{event.name}</h1><p className="public-detail-meta"><Icon name="calendar" /> {formatDate(event.date)} at {event.time} <span>·</span> <Icon name="location" /> {event.location}</p>{event.description && <p className="details-description">{event.description}</p>}<div className="public-ticket-meta"><strong>{price === 0 ? "Free entry" : `₹${price.toFixed(2)} per ticket`}</strong><span>{event.capacity || "Limited"} spots</span></div><div className="public-register-box"><div><h2>Want to attend?</h2><p>Sign in to register{price > 0 ? " and continue to secure payment" : ""}.</p></div><button className="primary" onClick={() => openLogin("register")}>Register now <Icon name="arrow" /></button></div></section><footer>Gatherly <span>·</span> Make room for what matters.</footer></main>;
 }
 
 function EventDetails({ event, goBack, updateRsvp }) {
@@ -112,11 +114,13 @@ function EventDetails({ event, goBack, updateRsvp }) {
   const [attendees, setAttendees] = useState([]);
   const [checkIn, setCheckIn] = useState(null);
   const [checkedInAttendees, setCheckedInAttendees] = useState([]);
+  const [registration, setRegistration] = useState(null);
+  const [registrations, setRegistrations] = useState([]);
   const [qrCode, setQrCode] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => []), request(`/api/events/${event.id}/check-in`), request(`/api/events/${event.id}/check-in/attendees`).catch(() => [])])
-      .then(([nextSummary, nextAttendees, nextCheckIn, nextCheckedIn]) => { setSummary(nextSummary); setAttendees(nextAttendees); setCheckIn(nextCheckIn); setCheckedInAttendees(nextCheckedIn); })
+    Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => []), request(`/api/events/${event.id}/check-in`), request(`/api/events/${event.id}/check-in/attendees`).catch(() => []), request(`/api/events/${event.id}/registrations`).catch(() => [])])
+      .then(([nextSummary, nextAttendees, nextCheckIn, nextCheckedIn, nextRegistrations]) => { setSummary(nextSummary); setAttendees(nextAttendees); setCheckIn(nextCheckIn); setCheckedInAttendees(nextCheckedIn); setRegistrations(nextRegistrations); })
       .catch((err) => setError(err.message));
     QRCode.toDataURL(`${window.location.origin}/#event-${event.id}`, { width: 220, margin: 2 })
       .then(setQrCode).catch(() => setError("Could not generate the event QR code."));
@@ -138,14 +142,19 @@ function EventDetails({ event, goBack, updateRsvp }) {
       setCheckedInAttendees(await request(`/api/events/${event.id}/check-in/attendees`));
     } catch (err) { setError(err.message); }
   };
+  const register = async () => {
+    try { setRegistration(await request(`/api/events/${event.id}/registrations`, { method: "POST" })); }
+    catch (err) { setRegistration({ error: err.message }); }
+  };
   return <section className="details-panel panel page-card">
     <button className="back-link" onClick={goBack}>← Back to all events</button>
     <div className="details-heading"><div><p className="eyebrow">EVENT DETAILS</p><h2>{event.name}</h2><p>{formatDate(event.date)} at {event.time} · {event.location}</p></div><span className="form-spark">✦</span></div>
     {event.description && <p className="details-description">{event.description}</p>}
     {error && <div className="error">{error}</div>}
+    <div className="rsvp-card registration-card"><div><strong>{Number(event.ticketPrice || 0) === 0 ? "Free registration" : `₹${Number(event.ticketPrice).toFixed(2)} registration`}</strong><p>{registration?.error || `${registration?.registered || 0} of ${event.capacity || "limited"} spots registered`}</p></div><button className="primary" onClick={register}>{registration?.status === "CONFIRMED" ? "Registered" : Number(event.ticketPrice || 0) === 0 ? "Register now" : "Start payment"}</button></div>
     <div className="rsvp-card"><div><strong>RSVP</strong><p>{summary?.attending || 0} attending · {summary?.declined || 0} declined</p></div><div className="rsvp-actions"><button className={summary?.currentUserStatus === "ATTENDING" ? "rsvp active" : "rsvp"} onClick={() => respond("ATTENDING")}>I’m attending</button><button className={summary?.currentUserStatus === "DECLINED" ? "rsvp declined active" : "rsvp declined"} onClick={() => respond("DECLINED")}>Can’t attend</button></div></div>
     <div className="checkin-card"><div><h3>Event check-in</h3><p>{checkIn?.checkedIn || 0} people checked in</p><button className={checkIn?.currentUserCheckedIn ? "rsvp active" : "rsvp"} onClick={selfCheckIn}>{checkIn?.currentUserCheckedIn ? "Checked in" : "Check myself in"}</button></div>{qrCode && <div className="qr-code"><img src={qrCode} alt={`QR code for ${event.name}`} /><small>Scan to open this event</small></div>}</div>
-    {summary?.owner && <div className="attendee-list"><h3>Attendees</h3>{attendees.length === 0 ? <p className="muted">No responses yet.</p> : attendees.map((attendee) => { const isCheckedIn = checkedInAttendees.some((checkedIn) => checkedIn.email === attendee.email); return <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{isCheckedIn ? "Checked in" : attendee.status === "ATTENDING" ? "Attending" : "Declined"}</em>{!isCheckedIn && attendee.status === "ATTENDING" && <button className="checkin-button" onClick={() => checkInAttendee(attendee.email)}>Check in</button>}</div>; })}</div>}
+    {summary?.owner && <div className="attendee-list"><h3>Registrations</h3>{registrations.length === 0 ? <p className="muted">No registrations yet.</p> : registrations.map((attendee) => <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{attendee.status === "CONFIRMED" ? "Registered" : "Payment pending"}</em></div>)}</div>}
   </section>;
 }
 
@@ -222,7 +231,7 @@ function App() {
     request(`/api/events/${eventId}`).then(setSharedEvent).catch((err) => setError(err.message));
   }, [user, page, events]);
   const submit = async (event) => { event.preventDefault(); try { await request(editingId ? `/api/events/${editingId}` : "/api/events", { method: editingId ? "PUT" : "POST", body: JSON.stringify(form) }); setForm(emptyEvent); setEditingId(null); await loadEvents(); setPage("events"); } catch (err) { setError(err.message); } };
-  const edit = (event) => { setEditingId(event.id); setForm({ name: event.name, description: event.description || "", date: event.date, time: event.time, location: event.location }); setPage("create"); };
+  const edit = (event) => { setEditingId(event.id); setForm({ name: event.name, description: event.description || "", date: event.date, time: event.time, location: event.location, ticketPrice: event.ticketPrice || "0", capacity: event.capacity || "100" }); setPage("create"); };
   const remove = async (id) => { if (!window.confirm("Delete this event?")) return; try { await request(`/api/events/${id}`, { method: "DELETE" }); await loadEvents(); } catch (err) { setError(err.message); } };
   const cancel = () => { setEditingId(null); setForm(emptyEvent); setPage("events"); };
   const upcoming = events.filter((event) => new Date(`${event.date}T${event.time || "00:00"}`) >= new Date()).length;
