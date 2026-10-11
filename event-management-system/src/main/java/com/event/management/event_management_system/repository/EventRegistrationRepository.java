@@ -8,5 +8,6 @@ import java.util.Optional;
 public interface EventRegistrationRepository extends JpaRepository<EventRegistration, Long> {
     Optional<EventRegistration> findByEventIdAndAttendeeEmailIgnoreCase(Long eventId, String email);
     List<EventRegistration> findAllByEventId(Long eventId);
+    List<EventRegistration> findAllByAttendeeEmailIgnoreCaseOrderByCreatedAtDesc(String email);
     long countByEventIdAndStatus(Long eventId, EventRegistration.Status status);
 }

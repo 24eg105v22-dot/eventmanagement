@@ -16,6 +16,26 @@ async function request(url, options = {}) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || "The request could not be completed.");
   }
+
+  function TicketQr({ registrationId }) {
+    const [src, setSrc] = useState("");
+    useEffect(() => {
+      QRCode.toDataURL(`${window.location.origin}/#ticket-${registrationId}`, { width: 140, margin: 1 }).then(setSrc);
+    }, [registrationId]);
+    return src ? <img src={src} alt="Ticket QR code" /> : <span className="qr-loading">Preparing QR...</span>;
+  }
+
+  function MyTickets({ tickets, loading, openEvent }) {
+    return <section className="tickets-panel panel page-card">
+      <div className="panel-heading"><div><p className="eyebrow">YOUR PASSES</p><h2>My tickets</h2><p>Keep every registration ready for the event day.</p></div></div>
+      {loading ? <div className="empty"><p>Loading your tickets...</p></div> : tickets.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="ticket" /></div><h3>No tickets yet</h3><p>Register for a public event and it will appear here.</p></div> : <div className="ticket-list">{tickets.map((ticket) => {
+        return <article className="ticket-card" key={ticket.registrationId}>
+          <div className="ticket-info"><p className="eyebrow">{ticket.status === "CONFIRMED" ? "CONFIRMED TICKET" : "PAYMENT PENDING"}</p><h3>{ticket.eventName}</h3><p>{formatDate(ticket.date)} at {ticket.time} · {ticket.location}</p><strong>{Number(ticket.ticketPrice || 0) === 0 ? "Free ticket" : `₹${Number(ticket.ticketPrice).toFixed(2)} paid ticket`}</strong><button className="secondary-action" onClick={() => openEvent(ticket.eventId)}>View event <Icon name="arrow" /></button></div>
+          <div className="ticket-qr"><TicketQr registrationId={ticket.registrationId} /><small>Show this QR at check-in</small></div>
+        </article>;
+      })}</div>}
+    </section>;
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -29,7 +49,8 @@ function Icon({ name }) {
     search: "m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
     edit: "m4 16-1 5 5-1L19 9l-4-4L4 16Zm10-10 4 4",
     trash: "M5 7h14m-9 4v6m4-6v6M9 7V4h6v3m4 0-1 13H6L5 7h14Z",
-    arrow: "M5 12h14m-6-6 6 6-6 6"
+    arrow: "M5 12h14m-6-6 6 6-6 6",
+    ticket: "M4 7a3 3 0 0 0 0 6v4h16V7h-4a3 3 0 0 0-6 0H4Zm6 6h.01M14 13h.01"
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
@@ -51,8 +72,8 @@ function loadRazorpay() {
 }
 
 function Layout({ page, setPage, events, error, loadEvents, user, logout, children }) {
-  const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : page === "calendar" ? "Calendar" : "Create event";
-  const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : page === "calendar" ? "Your calendar" : "Create something memorable";
+  const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : page === "calendar" ? "Calendar" : page === "tickets" ? "My tickets" : "Create event";
+  const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : page === "calendar" ? "Your calendar" : page === "tickets" ? "Your tickets" : "Create something memorable";
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="brand" onClick={() => setPage("overview")}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button>
@@ -60,6 +81,7 @@ function Layout({ page, setPage, events, error, loadEvents, user, logout, childr
         <button className={page === "overview" ? "active" : ""} onClick={() => setPage("overview")}><Icon name="grid" /> Overview</button>
         <button className={page === "events" || page.startsWith("event-") ? "active" : ""} onClick={() => setPage("events")}><Icon name="calendar" /> All events <span className="nav-count">{events.length}</span></button>
         <button className={page === "calendar" ? "active" : ""} onClick={() => setPage("calendar")}><Icon name="calendar" /> Calendar</button>
+        <button className={page === "tickets" ? "active" : ""} onClick={() => setPage("tickets")}><Icon name="ticket" /> My tickets</button>
         <button className={page === "create" ? "active" : ""} onClick={() => setPage("create")}><Icon name="plus" /> Create event</button>
       </nav>
       <div className="sidebar-footer"><div className="avatar">{user?.name?.slice(0, 2).toUpperCase() || "EM"}</div><div><strong>{user?.name || "Event Manager"}</strong><small>{user?.email || "Workspace"}</small></div><button className="logout" onClick={logout}>Log out</button></div>
@@ -247,10 +269,14 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [tickets, setTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
   const setPage = (nextPage) => { setPageState(nextPage); window.history.pushState({}, "", `#${nextPage}`); window.scrollTo(0, 0); };
   const loadEvents = async () => { try { setLoading(true); setEvents(await request("/api/events")); setError(""); } catch (err) { setError(err.message); } finally { setLoading(false); } };
   const loadPublicEvents = async () => { try { setPublicLoading(true); setPublicEvents(await request("/api/public/events")); } catch (err) { setError(err.message); } finally { setPublicLoading(false); } };
+  const loadTickets = async () => { try { setTicketsLoading(true); setTickets(await request("/api/registrations/me")); } catch (err) { setError(err.message); } finally { setTicketsLoading(false); } };
   useEffect(() => { if (user) loadEvents(); const onPop = () => setPageState(window.location.hash.slice(1) || "overview"); window.addEventListener("popstate", onPop); return () => window.removeEventListener("popstate", onPop); }, [user]);
+  useEffect(() => { if (user && page === "tickets") loadTickets(); }, [user, page]);
   useEffect(() => { if (!user) loadPublicEvents(); }, [user]);
   useEffect(() => {
     const eventId = page.startsWith("public-event-") ? page.slice(13) : null;
@@ -274,7 +300,7 @@ function App() {
   const upcoming = events.filter((event) => new Date(`${event.date}T${event.time || "00:00"}`) >= new Date()).length;
   const overview = <><section className="hero"><div><p className="eyebrow">YOUR EVENT HUB</p><h2>Make every moment<br /><em>memorable.</em></h2><p>Keep your plans clear, your team aligned, and every detail in one place.</p></div><div className="hero-shape"><span>✦</span><span>✧</span><span>✦</span></div></section><section className="stats"><div className="stat-card"><span className="stat-icon purple"><Icon name="calendar" /></span><div><small>Total events</small><strong>{events.length}</strong></div><span className="trend">Live</span></div><div className="stat-card"><span className="stat-icon orange"><Icon name="clock" /></span><div><small>Upcoming</small><strong>{upcoming}</strong></div><span className="trend neutral">Scheduled</span></div><div className="stat-card"><span className="stat-icon green"><Icon name="location" /></span><div><small>Locations</small><strong>{new Set(events.map((event) => event.location)).size}</strong></div><span className="trend neutral">All time</span></div></section><div className="overview-actions"><button className="primary" onClick={() => setPage("create")}><Icon name="plus" /> Create event</button><button className="secondary-action" onClick={() => setPage("events")}>View all events <Icon name="arrow" /></button></div></>;
   const selectedEvent = page.startsWith("event-") ? events.find((event) => String(event.id) === page.slice(6)) || sharedEvent : null;
-  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : page === "calendar" ? <CalendarView events={events} openDetails={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
+  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : page === "calendar" ? <CalendarView events={events} openDetails={(id) => setPage(`event-${id}`)} /> : page === "tickets" ? <MyTickets tickets={tickets} loading={ticketsLoading} openEvent={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
   if (!user) {
     const openLogin = (mode) => { localStorage.setItem("gatherly_auth_mode", mode); setPageState("login"); };
     if (page === "login") return <AuthPage onAuthenticated={setUser} />;

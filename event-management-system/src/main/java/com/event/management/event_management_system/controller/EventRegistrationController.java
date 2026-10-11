@@ -39,4 +39,5 @@ public class EventRegistrationController {
                                                                        @AuthenticationPrincipal UserDetails user) {
         return registrationService.registrations(eventId, user.getUsername());
     }
+
 }

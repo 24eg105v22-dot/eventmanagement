@@ -135,6 +135,23 @@ public class EventRegistrationService {
                 .toList();
     }
 
+    public List<MyRegistration> myRegistrations(String email) {
+        return registrationRepository.findAllByAttendeeEmailIgnoreCaseOrderByCreatedAtDesc(email).stream()
+                .map(registration -> new MyRegistration(
+                        registration.getId(),
+                        registration.getEvent().getId(),
+                        registration.getEvent().getName(),
+                        registration.getEvent().getDescription(),
+                        registration.getEvent().getDate(),
+                        registration.getEvent().getTime(),
+                        registration.getEvent().getLocation(),
+                        registration.getEvent().getTicketPrice(),
+                        registration.getStatus(),
+                        registration.getRazorpayPaymentId(),
+                        registration.getCreatedAt()))
+                .toList();
+    }
+
     private RegistrationResult result(Event event, EventRegistration registration) {
         long confirmed = registrationRepository.countByEventIdAndStatus(event.getId(), EventRegistration.Status.CONFIRMED);
         return new RegistrationResult(event.getId(), registration.getStatus(), price(event), event.getCapacity(), confirmed);
@@ -146,6 +163,9 @@ public class EventRegistrationService {
 
     public record RegistrationResult(Long eventId, EventRegistration.Status status, BigDecimal ticketPrice, Integer capacity, long registered) {}
     public record Registration(String name, String email, EventRegistration.Status status, String paymentId) {}
+    public record MyRegistration(Long registrationId, Long eventId, String eventName, String description,
+                                 String date, String time, String location, BigDecimal ticketPrice,
+                                 EventRegistration.Status status, String paymentId, java.time.Instant createdAt) {}
     public record PaymentOrder(String orderId, String keyId, long amount, String currency) {}
     public record PaymentVerification(String razorpayOrderId, String razorpayPaymentId, String razorpaySignature) {}
 }
