@@ -21,6 +21,19 @@ public class EventRegistrationController {
         return registrationService.register(eventId, user.getUsername());
     }
 
+    @PostMapping("/payment-order")
+    public EventRegistrationService.PaymentOrder paymentOrder(@PathVariable Long eventId,
+                                                                @AuthenticationPrincipal UserDetails user) {
+        return registrationService.createPaymentOrder(eventId, user.getUsername());
+    }
+
+    @PostMapping("/verify-payment")
+    public EventRegistrationService.RegistrationResult verifyPayment(@PathVariable Long eventId,
+                                                                       @RequestBody EventRegistrationService.PaymentVerification verification,
+                                                                       @AuthenticationPrincipal UserDetails user) {
+        return registrationService.verifyPayment(eventId, user.getUsername(), verification);
+    }
+
     @GetMapping
     public List<EventRegistrationService.Registration> registrations(@PathVariable Long eventId,
                                                                        @AuthenticationPrincipal UserDetails user) {

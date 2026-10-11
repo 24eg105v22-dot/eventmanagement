@@ -39,6 +39,17 @@ function formatDate(date) {
   return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Razorpay checkout could not be loaded."));
+    document.body.appendChild(script);
+  });
+}
+
 function Layout({ page, setPage, events, error, loadEvents, user, logout, children }) {
   const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : page === "calendar" ? "Calendar" : "Create event";
   const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : page === "calendar" ? "Your calendar" : "Create something memorable";
@@ -143,7 +154,33 @@ function EventDetails({ event, goBack, updateRsvp }) {
     } catch (err) { setError(err.message); }
   };
   const register = async () => {
-    try { setRegistration(await request(`/api/events/${event.id}/registrations`, { method: "POST" })); }
+    try {
+      if (Number(event.ticketPrice || 0) === 0) {
+        setRegistration(await request(`/api/events/${event.id}/registrations`, { method: "POST" }));
+        return;
+      }
+      await loadRazorpay();
+      const order = await request(`/api/events/${event.id}/registrations/payment-order`, { method: "POST" });
+      const result = await new Promise((resolve, reject) => {
+        const checkout = new window.Razorpay({
+          key: order.keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: "Gatherly",
+          description: event.name,
+          order_id: order.orderId,
+          prefill: { name: JSON.parse(localStorage.getItem("gatherly_user") || "{}").name },
+          handler: resolve,
+          modal: { ondismiss: () => reject(new Error("Payment was cancelled.")) }
+        });
+        checkout.on("payment.failed", () => reject(new Error("Payment failed. Please try again.")));
+        checkout.open();
+      });
+      setRegistration(await request(`/api/events/${event.id}/registrations/verify-payment`, {
+        method: "POST",
+        body: JSON.stringify({ razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id, razorpaySignature: result.razorpay_signature })
+      }));
+    }
     catch (err) { setRegistration({ error: err.message }); }
   };
   return <section className="details-panel panel page-card">
