@@ -41,7 +41,7 @@ public class EventController {
 
     @GetMapping("/{id}")
     public Event getEventById(@PathVariable Long id, @AuthenticationPrincipal UserDetails user) {
-        return eventService.getEventById(id, user.getUsername());
+        return eventService.getEventForViewing(id);
     }
 
     @PutMapping("/{id}")

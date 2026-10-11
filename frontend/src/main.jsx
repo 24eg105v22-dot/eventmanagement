@@ -89,6 +89,24 @@ function EventList({ events, loading, edit, remove, openDetails }) {
   </section>;
 }
 
+function PublicEvents({ events, loading, openDetails, openLogin }) {
+  const [search, setSearch] = useState("");
+  const filtered = events.filter((event) => [event.name, event.description, event.location]
+    .some((value) => value?.toLowerCase().includes(search.toLowerCase())));
+  return <main className="public-shell">
+    <header className="public-header"><button className="brand" onClick={() => window.location.hash = ""}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button><div><button className="public-login" onClick={() => openLogin("login")}>Sign in</button><button className="primary public-cta" onClick={() => openLogin("register")}>Create an event</button></div></header>
+    <section className="public-hero"><p className="eyebrow">DISCOVER WHAT'S HAPPENING</p><h1>Find your next<br /><em>memorable moment.</em></h1><p>Explore events from local organizers and communities. Register for the ones you love.</p></section>
+    <section className="public-events"><div className="public-section-heading"><div><p className="eyebrow">OPEN TO EVERYONE</p><h2>Upcoming events</h2></div><div className="search public-search"><Icon name="search" /><input aria-label="Search public events" placeholder="Search events..." value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
+      {loading ? <div className="empty"><p>Loading events...</p></div> : filtered.length === 0 ? <div className="empty"><h3>No events found</h3><p>Try a different search.</p></div> : <div className="public-event-grid">{filtered.map((event) => <article className="public-event-card" key={event.id} onClick={() => openDetails(event.id)}><div className="public-date"><strong>{new Date(`${event.date}T00:00:00`).getDate()}</strong><span>{new Date(`${event.date}T00:00:00`).toLocaleDateString("en-US", { month: "short" })}</span></div><h3>{event.name}</h3>{event.description && <p>{event.description}</p>}<small><Icon name="clock" /> {formatDate(event.date)} at {event.time}</small><small><Icon name="location" /> {event.location}</small><button className="public-register" onClick={(clickEvent) => { clickEvent.stopPropagation(); openLogin("register"); }}>Register to attend <Icon name="arrow" /></button></article>)}</div>}
+    </section>
+    <footer>Gatherly <span>·</span> Make room for what matters.</footer>
+  </main>;
+}
+
+function PublicEventDetails({ event, openLogin, goBack }) {
+  return <main className="public-shell"><header className="public-header"><button className="brand" onClick={goBack}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button><button className="primary public-cta" onClick={() => openLogin("register")}>Register to attend</button></header><section className="public-detail panel"><button className="back-link" onClick={goBack}>← Back to events</button><p className="eyebrow">EVENT DETAILS</p><h1>{event.name}</h1><p className="public-detail-meta"><Icon name="calendar" /> {formatDate(event.date)} at {event.time} <span>·</span> <Icon name="location" /> {event.location}</p>{event.description && <p className="details-description">{event.description}</p>}<div className="public-register-box"><div><h2>Want to attend?</h2><p>Create an account to register and receive event updates.</p></div><button className="primary" onClick={() => openLogin("register")}>Register now <Icon name="arrow" /></button></div></section><footer>Gatherly <span>·</span> Make room for what matters.</footer></main>;
+}
+
 function EventDetails({ event, goBack, updateRsvp }) {
   const [summary, setSummary] = useState(null);
   const [attendees, setAttendees] = useState([]);
@@ -153,7 +171,7 @@ function CalendarView({ events, openDetails }) {
 }
 
 function AuthPage({ onAuthenticated }) {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(() => localStorage.getItem("gatherly_auth_mode") || "login");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const submit = async (event) => {
@@ -162,6 +180,7 @@ function AuthPage({ onAuthenticated }) {
       const response = await request(`/api/auth/${mode}`, { method: "POST", body: JSON.stringify(form) });
       localStorage.setItem("gatherly_token", response.token);
       localStorage.setItem("gatherly_user", JSON.stringify(response));
+      localStorage.removeItem("gatherly_auth_mode");
       onAuthenticated(response);
     } catch (err) {
       setError(err.message);
@@ -174,22 +193,48 @@ function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("gatherly_user") || "null"));
   const [page, setPageState] = useState(window.location.hash.slice(1) || "overview");
   const [events, setEvents] = useState([]);
+  const [publicEvents, setPublicEvents] = useState([]);
+  const [publicLoading, setPublicLoading] = useState(true);
+  const [publicSelectedEvent, setPublicSelectedEvent] = useState(null);
+  const [sharedEvent, setSharedEvent] = useState(null);
   const [form, setForm] = useState(emptyEvent);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const setPage = (nextPage) => { setPageState(nextPage); window.history.pushState({}, "", `#${nextPage}`); window.scrollTo(0, 0); };
   const loadEvents = async () => { try { setLoading(true); setEvents(await request("/api/events")); setError(""); } catch (err) { setError(err.message); } finally { setLoading(false); } };
+  const loadPublicEvents = async () => { try { setPublicLoading(true); setPublicEvents(await request("/api/public/events")); } catch (err) { setError(err.message); } finally { setPublicLoading(false); } };
   useEffect(() => { if (user) loadEvents(); const onPop = () => setPageState(window.location.hash.slice(1) || "overview"); window.addEventListener("popstate", onPop); return () => window.removeEventListener("popstate", onPop); }, [user]);
+  useEffect(() => { if (!user) loadPublicEvents(); }, [user]);
+  useEffect(() => {
+    const eventId = page.startsWith("public-event-") ? page.slice(13) : null;
+    if (!eventId) return setPublicSelectedEvent(null);
+    const cached = publicEvents.find((event) => String(event.id) === eventId);
+    if (cached) return setPublicSelectedEvent(cached);
+    request(`/api/public/events/${eventId}`).then(setPublicSelectedEvent).catch((err) => setError(err.message));
+  }, [page, publicEvents]);
+  useEffect(() => {
+    const eventId = page.startsWith("event-") ? page.slice(6) : null;
+    if (!user || !eventId || events.some((event) => String(event.id) === eventId)) {
+      if (!eventId) setSharedEvent(null);
+      return;
+    }
+    request(`/api/events/${eventId}`).then(setSharedEvent).catch((err) => setError(err.message));
+  }, [user, page, events]);
   const submit = async (event) => { event.preventDefault(); try { await request(editingId ? `/api/events/${editingId}` : "/api/events", { method: editingId ? "PUT" : "POST", body: JSON.stringify(form) }); setForm(emptyEvent); setEditingId(null); await loadEvents(); setPage("events"); } catch (err) { setError(err.message); } };
   const edit = (event) => { setEditingId(event.id); setForm({ name: event.name, description: event.description || "", date: event.date, time: event.time, location: event.location }); setPage("create"); };
   const remove = async (id) => { if (!window.confirm("Delete this event?")) return; try { await request(`/api/events/${id}`, { method: "DELETE" }); await loadEvents(); } catch (err) { setError(err.message); } };
   const cancel = () => { setEditingId(null); setForm(emptyEvent); setPage("events"); };
   const upcoming = events.filter((event) => new Date(`${event.date}T${event.time || "00:00"}`) >= new Date()).length;
   const overview = <><section className="hero"><div><p className="eyebrow">YOUR EVENT HUB</p><h2>Make every moment<br /><em>memorable.</em></h2><p>Keep your plans clear, your team aligned, and every detail in one place.</p></div><div className="hero-shape"><span>✦</span><span>✧</span><span>✦</span></div></section><section className="stats"><div className="stat-card"><span className="stat-icon purple"><Icon name="calendar" /></span><div><small>Total events</small><strong>{events.length}</strong></div><span className="trend">Live</span></div><div className="stat-card"><span className="stat-icon orange"><Icon name="clock" /></span><div><small>Upcoming</small><strong>{upcoming}</strong></div><span className="trend neutral">Scheduled</span></div><div className="stat-card"><span className="stat-icon green"><Icon name="location" /></span><div><small>Locations</small><strong>{new Set(events.map((event) => event.location)).size}</strong></div><span className="trend neutral">All time</span></div></section><div className="overview-actions"><button className="primary" onClick={() => setPage("create")}><Icon name="plus" /> Create event</button><button className="secondary-action" onClick={() => setPage("events")}>View all events <Icon name="arrow" /></button></div></>;
-  const selectedEvent = page.startsWith("event-") ? events.find((event) => String(event.id) === page.slice(6)) : null;
+  const selectedEvent = page.startsWith("event-") ? events.find((event) => String(event.id) === page.slice(6)) || sharedEvent : null;
   const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : page === "calendar" ? <CalendarView events={events} openDetails={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
-  if (!user) return <AuthPage onAuthenticated={setUser} />;
+  if (!user) {
+    const openLogin = (mode) => { localStorage.setItem("gatherly_auth_mode", mode); setPageState("login"); };
+    if (page === "login") return <AuthPage onAuthenticated={setUser} />;
+    if (page.startsWith("public-event-") && publicSelectedEvent) return <PublicEventDetails event={publicSelectedEvent} openLogin={openLogin} goBack={() => { setPageState("events"); setPublicSelectedEvent(null); }} />;
+    return <PublicEvents events={publicEvents} loading={publicLoading} openDetails={(id) => { setPageState(`public-event-${id}`); }} openLogin={openLogin} />;
+  }
   return <Layout page={page} setPage={setPage} events={events} error={error} loadEvents={loadEvents} user={user} logout={() => { localStorage.removeItem("gatherly_token"); localStorage.removeItem("gatherly_user"); setUser(null); }} >{content}</Layout>;
 }
 

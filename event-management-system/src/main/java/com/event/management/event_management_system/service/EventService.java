@@ -28,8 +28,17 @@ public class EventService {
         return eventRepository.findAllByOwnerEmailIgnoreCase(email);
     }
 
+    public List<Event> getAllPublicEvents() {
+        return eventRepository.findAll();
+    }
+
     public Event getEventById(Long id, String email) {
         return eventRepository.findByIdAndOwnerEmailIgnoreCase(id, email)
+                .orElseThrow(() -> new EventNotFoundException(id));
+    }
+
+    public Event getEventForViewing(Long id) {
+        return eventRepository.findById(id)
                 .orElseThrow(() -> new EventNotFoundException(id));
     }
 
