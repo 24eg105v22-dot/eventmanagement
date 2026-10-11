@@ -39,18 +39,20 @@ function formatDate(date) {
 }
 
 function Layout({ page, setPage, events, error, loadEvents, user, logout, children }) {
+  const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : "Create event";
+  const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : "Create something memorable";
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="brand" onClick={() => setPage("overview")}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button>
       <nav>
         <button className={page === "overview" ? "active" : ""} onClick={() => setPage("overview")}><Icon name="grid" /> Overview</button>
-        <button className={page === "events" ? "active" : ""} onClick={() => setPage("events")}><Icon name="calendar" /> All events <span className="nav-count">{events.length}</span></button>
+        <button className={page === "events" || page.startsWith("event-") ? "active" : ""} onClick={() => setPage("events")}><Icon name="calendar" /> All events <span className="nav-count">{events.length}</span></button>
         <button className={page === "create" ? "active" : ""} onClick={() => setPage("create")}><Icon name="plus" /> Create event</button>
       </nav>
       <div className="sidebar-footer"><div className="avatar">{user?.name?.slice(0, 2).toUpperCase() || "EM"}</div><div><strong>{user?.name || "Event Manager"}</strong><small>{user?.email || "Workspace"}</small></div><button className="logout" onClick={logout}>Log out</button></div>
     </aside>
     <main className="content">
-      <header className="topbar"><div><p className="crumb">Workspace / {page === "overview" ? "Overview" : page === "events" ? "All events" : "Create event"}</p><h1>{page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : "Create something memorable"} <span>✦</span></h1></div><div className="topbar-actions"><div className="status"><span className="status-dot" /> All systems operational</div><button className="mobile-logout" onClick={logout}>Log out</button></div></header>
+      <header className="topbar"><div><p className="crumb">Workspace / {pageName}</p><h1>{pageTitle} <span>✦</span></h1></div><div className="topbar-actions"><div className="status"><span className="status-dot" /> All systems operational</div><button className="mobile-logout" onClick={logout}>Log out</button></div></header>
       {error && <div className="error"><strong>Something went wrong.</strong> {error}<button onClick={loadEvents}>Retry</button></div>}
       {children}
       <footer>Gatherly <span>·</span> Make room for what matters.</footer>
@@ -70,7 +72,7 @@ function EventForm({ form, setForm, editingId, submit, cancel }) {
   </form>;
 }
 
-function EventList({ events, loading, edit, remove }) {
+function EventList({ events, loading, edit, remove, openDetails }) {
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState("all");
   const filtered = useMemo(() => events.filter((event) => {
@@ -81,7 +83,33 @@ function EventList({ events, loading, edit, remove }) {
   return <section className="events-panel panel page-card">
     <div className="panel-heading"><div><h2>{eventFilter === "all" ? "All events" : "Upcoming events"}</h2><p>Everything you have planned</p></div></div>
     <div className="toolbar"><div className="search"><Icon name="search" /><input aria-label="Search events" placeholder="Search events..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><select className="filter" value={eventFilter} onChange={(event) => setEventFilter(event.target.value)}><option value="all">All events</option><option value="upcoming">Upcoming</option></select></div>
-    {loading ? <div className="empty"><p>Loading your events...</p></div> : filtered.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="calendar" /></div><h3>{search ? "No matching events" : "Your calendar is clear"}</h3><p>{search ? "Try another search term." : "Create an event to get your plans moving."}</p></div> : <div className="event-list">{filtered.map((event) => <article className="event-row" key={event.id}><div className="date-block"><strong>{new Date(`${event.date}T00:00:00`).getDate() || "--"}</strong><span>{new Date(`${event.date}T00:00:00`).toLocaleDateString("en-US", { month: "short" })}</span></div><div className="event-info"><h3>{event.name}</h3><p><Icon name="clock" /> {formatDate(event.date)} at {event.time} <span>·</span> <Icon name="location" /> {event.location}</p>{event.description && <small>{event.description}</small>}</div><div className="row-actions"><button aria-label={`Edit ${event.name}`} onClick={() => edit(event)}><Icon name="edit" /></button><button aria-label={`Delete ${event.name}`} onClick={() => remove(event.id)}><Icon name="trash" /></button></div></article>)}</div>}
+    {loading ? <div className="empty"><p>Loading your events...</p></div> : filtered.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="calendar" /></div><h3>{search ? "No matching events" : "Your calendar is clear"}</h3><p>{search ? "Try another search term." : "Create an event to get your plans moving."}</p></div> : <div className="event-list">{filtered.map((event) => <article className="event-row event-row-clickable" key={event.id} onClick={() => openDetails(event.id)}><div className="date-block"><strong>{new Date(`${event.date}T00:00:00`).getDate() || "--"}</strong><span>{new Date(`${event.date}T00:00:00`).toLocaleDateString("en-US", { month: "short" })}</span></div><div className="event-info"><h3>{event.name}</h3><p><Icon name="clock" /> {formatDate(event.date)} at {event.time} <span>·</span> <Icon name="location" /> {event.location}</p>{event.description && <small>{event.description}</small>}</div><div className="row-actions"><button aria-label={`Edit ${event.name}`} onClick={(clickEvent) => { clickEvent.stopPropagation(); edit(event); }}><Icon name="edit" /></button><button aria-label={`Delete ${event.name}`} onClick={(clickEvent) => { clickEvent.stopPropagation(); remove(event.id); }}><Icon name="trash" /></button></div></article>)}</div>}
+  </section>;
+}
+
+function EventDetails({ event, goBack, updateRsvp }) {
+  const [summary, setSummary] = useState(null);
+  const [attendees, setAttendees] = useState([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([request(`/api/events/${event.id}/rsvp`), request(`/api/events/${event.id}/rsvp/attendees`).catch(() => [])])
+      .then(([nextSummary, nextAttendees]) => { setSummary(nextSummary); setAttendees(nextAttendees); })
+      .catch((err) => setError(err.message));
+  }, [event.id]);
+  const respond = async (status) => {
+    try {
+      const nextSummary = await request(`/api/events/${event.id}/rsvp`, { method: "PUT", body: JSON.stringify({ status }) });
+      setSummary(nextSummary);
+      if (nextSummary.owner) setAttendees(await request(`/api/events/${event.id}/rsvp/attendees`));
+    } catch (err) { setError(err.message); }
+  };
+  return <section className="details-panel panel page-card">
+    <button className="back-link" onClick={goBack}>← Back to all events</button>
+    <div className="details-heading"><div><p className="eyebrow">EVENT DETAILS</p><h2>{event.name}</h2><p>{formatDate(event.date)} at {event.time} · {event.location}</p></div><span className="form-spark">✦</span></div>
+    {event.description && <p className="details-description">{event.description}</p>}
+    {error && <div className="error">{error}</div>}
+    <div className="rsvp-card"><div><strong>RSVP</strong><p>{summary?.attending || 0} attending · {summary?.declined || 0} declined</p></div><div className="rsvp-actions"><button className={summary?.currentUserStatus === "ATTENDING" ? "rsvp active" : "rsvp"} onClick={() => respond("ATTENDING")}>I’m attending</button><button className={summary?.currentUserStatus === "DECLINED" ? "rsvp declined active" : "rsvp declined"} onClick={() => respond("DECLINED")}>Can’t attend</button></div></div>
+    {summary?.owner && <div className="attendee-list"><h3>Attendees</h3>{attendees.length === 0 ? <p className="muted">No responses yet.</p> : attendees.map((attendee) => <div className="attendee" key={attendee.email}><span className="avatar">{attendee.name.slice(0, 2).toUpperCase()}</span><span><strong>{attendee.name}</strong><small>{attendee.email}</small></span><em>{attendee.status === "ATTENDING" ? "Attending" : "Declined"}</em></div>)}</div>}
   </section>;
 }
 
@@ -120,7 +148,8 @@ function App() {
   const cancel = () => { setEditingId(null); setForm(emptyEvent); setPage("events"); };
   const upcoming = events.filter((event) => new Date(`${event.date}T${event.time || "00:00"}`) >= new Date()).length;
   const overview = <><section className="hero"><div><p className="eyebrow">YOUR EVENT HUB</p><h2>Make every moment<br /><em>memorable.</em></h2><p>Keep your plans clear, your team aligned, and every detail in one place.</p></div><div className="hero-shape"><span>✦</span><span>✧</span><span>✦</span></div></section><section className="stats"><div className="stat-card"><span className="stat-icon purple"><Icon name="calendar" /></span><div><small>Total events</small><strong>{events.length}</strong></div><span className="trend">Live</span></div><div className="stat-card"><span className="stat-icon orange"><Icon name="clock" /></span><div><small>Upcoming</small><strong>{upcoming}</strong></div><span className="trend neutral">Scheduled</span></div><div className="stat-card"><span className="stat-icon green"><Icon name="location" /></span><div><small>Locations</small><strong>{new Set(events.map((event) => event.location)).size}</strong></div><span className="trend neutral">All time</span></div></section><div className="overview-actions"><button className="primary" onClick={() => setPage("create")}><Icon name="plus" /> Create event</button><button className="secondary-action" onClick={() => setPage("events")}>View all events <Icon name="arrow" /></button></div></>;
-  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} />;
+  const selectedEvent = page.startsWith("event-") ? events.find((event) => String(event.id) === page.slice(6)) : null;
+  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
   if (!user) return <AuthPage onAuthenticated={setUser} />;
   return <Layout page={page} setPage={setPage} events={events} error={error} loadEvents={loadEvents} user={user} logout={() => { localStorage.removeItem("gatherly_token"); localStorage.removeItem("gatherly_user"); setUser(null); }} >{content}</Layout>;
 }
