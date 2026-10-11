@@ -135,6 +135,35 @@ public class EventRegistrationService {
                 .toList();
     }
 
+    public Analytics analytics(Long eventId, String ownerEmail) {
+        Event event = event(eventId);
+        requireOwner(event, ownerEmail);
+        List<EventRegistration> registrations = registrationRepository.findAllByEventId(eventId);
+        long confirmed = registrations.stream().filter(registration -> registration.getStatus() == EventRegistration.Status.CONFIRMED).count();
+        long pending = registrations.stream().filter(registration -> registration.getStatus() == EventRegistration.Status.PENDING_PAYMENT).count();
+        BigDecimal revenue = event.getTicketPrice().multiply(BigDecimal.valueOf(confirmed));
+        return new Analytics(confirmed, pending, event.getCapacity() - confirmed, revenue);
+    }
+
+    public String exportCsv(Long eventId, String ownerEmail) {
+        Event event = event(eventId);
+        requireOwner(event, ownerEmail);
+        StringBuilder csv = new StringBuilder("Name,Email,Status,Payment ID,Created At\n");
+        registrationRepository.findAllByEventId(eventId).forEach(registration -> {
+            csv.append(csvValue(registration.getAttendee().getName())).append(',')
+                    .append(csvValue(registration.getAttendee().getEmail())).append(',')
+                    .append(registration.getStatus()).append(',')
+                    .append(csvValue(registration.getRazorpayPaymentId())).append(',')
+                    .append(registration.getCreatedAt()).append('\n');
+        });
+        return csv.toString();
+    }
+
+    private String csvValue(String value) {
+        if (value == null) return "";
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
     public List<MyRegistration> myRegistrations(String email) {
         return registrationRepository.findAllByAttendeeEmailIgnoreCaseOrderByCreatedAtDesc(email).stream()
                 .map(registration -> new MyRegistration(
@@ -163,6 +192,7 @@ public class EventRegistrationService {
 
     public record RegistrationResult(Long eventId, EventRegistration.Status status, BigDecimal ticketPrice, Integer capacity, long registered) {}
     public record Registration(String name, String email, EventRegistration.Status status, String paymentId) {}
+    public record Analytics(long confirmed, long pending, long remaining, BigDecimal revenue) {}
     public record MyRegistration(Long registrationId, Long eventId, String eventName, String description,
                                  String date, String time, String location, BigDecimal ticketPrice,
                                  EventRegistration.Status status, String paymentId, java.time.Instant createdAt) {}

@@ -4,6 +4,9 @@ import com.event.management.event_management_system.service.EventRegistrationSer
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import java.util.List;
 
 @RestController
@@ -38,6 +41,21 @@ public class EventRegistrationController {
     public List<EventRegistrationService.Registration> registrations(@PathVariable Long eventId,
                                                                        @AuthenticationPrincipal UserDetails user) {
         return registrationService.registrations(eventId, user.getUsername());
+    }
+
+    @GetMapping("/analytics")
+    public EventRegistrationService.Analytics analytics(@PathVariable Long eventId,
+                                                         @AuthenticationPrincipal UserDetails user) {
+        return registrationService.analytics(eventId, user.getUsername());
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<String> export(@PathVariable Long eventId,
+                                         @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=event-" + eventId + "-registrations.csv")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(registrationService.exportCsv(eventId, user.getUsername()));
     }
 
 }
