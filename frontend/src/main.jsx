@@ -39,14 +39,15 @@ function formatDate(date) {
 }
 
 function Layout({ page, setPage, events, error, loadEvents, user, logout, children }) {
-  const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : "Create event";
-  const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : "Create something memorable";
+  const pageName = page.startsWith("event-") ? "Event details" : page === "overview" ? "Overview" : page === "events" ? "All events" : page === "calendar" ? "Calendar" : "Create event";
+  const pageTitle = page.startsWith("event-") ? "Event details" : page === "overview" ? "Good morning, planner" : page === "events" ? "All your events" : page === "calendar" ? "Your calendar" : "Create something memorable";
   return <div className="app-shell">
     <aside className="sidebar">
       <button className="brand" onClick={() => setPage("overview")}><span className="brand-mark"><Icon name="calendar" /></span><span>Gatherly</span></button>
       <nav>
         <button className={page === "overview" ? "active" : ""} onClick={() => setPage("overview")}><Icon name="grid" /> Overview</button>
         <button className={page === "events" || page.startsWith("event-") ? "active" : ""} onClick={() => setPage("events")}><Icon name="calendar" /> All events <span className="nav-count">{events.length}</span></button>
+        <button className={page === "calendar" ? "active" : ""} onClick={() => setPage("calendar")}><Icon name="calendar" /> Calendar</button>
         <button className={page === "create" ? "active" : ""} onClick={() => setPage("create")}><Icon name="plus" /> Create event</button>
       </nav>
       <div className="sidebar-footer"><div className="avatar">{user?.name?.slice(0, 2).toUpperCase() || "EM"}</div><div><strong>{user?.name || "Event Manager"}</strong><small>{user?.email || "Workspace"}</small></div><button className="logout" onClick={logout}>Log out</button></div>
@@ -113,6 +114,27 @@ function EventDetails({ event, goBack, updateRsvp }) {
   </section>;
 }
 
+function CalendarView({ events, openDetails }) {
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstDay = new Date(year, monthIndex, 1).getDay();
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const cells = Array.from({ length: Math.ceil((firstDay + daysInMonth) / 7) * 7 }, (_, index) => {
+    const day = index - firstDay + 1;
+    return day > 0 && day <= daysInMonth ? new Date(year, monthIndex, day) : null;
+  });
+  const eventsForDay = (day) => events.filter((event) => event.date === `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+  return <section className="calendar-panel panel">
+    <div className="calendar-heading"><div><h2>{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2><p>Plan and review your schedule</p></div><div className="month-actions"><button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} aria-label="Previous month">‹</button><button onClick={() => setMonth(new Date())}>Today</button><button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))} aria-label="Next month">›</button></div></div>
+    <div className="calendar-grid calendar-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
+    <div className="calendar-grid calendar-days">{cells.map((date, index) => {
+      const dayEvents = date ? eventsForDay(date.getDate()) : [];
+      return <div className={date ? "calendar-day" : "calendar-day empty-day"} key={`${date || "empty"}-${index}`}>{date && <><strong>{date.getDate()}</strong>{dayEvents.map((event) => <button className="calendar-event" key={event.id} onClick={() => openDetails(event.id)}>{event.name}</button>)}</>}</div>;
+    })}</div>
+  </section>;
+}
+
 function AuthPage({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
@@ -149,7 +171,7 @@ function App() {
   const upcoming = events.filter((event) => new Date(`${event.date}T${event.time || "00:00"}`) >= new Date()).length;
   const overview = <><section className="hero"><div><p className="eyebrow">YOUR EVENT HUB</p><h2>Make every moment<br /><em>memorable.</em></h2><p>Keep your plans clear, your team aligned, and every detail in one place.</p></div><div className="hero-shape"><span>✦</span><span>✧</span><span>✦</span></div></section><section className="stats"><div className="stat-card"><span className="stat-icon purple"><Icon name="calendar" /></span><div><small>Total events</small><strong>{events.length}</strong></div><span className="trend">Live</span></div><div className="stat-card"><span className="stat-icon orange"><Icon name="clock" /></span><div><small>Upcoming</small><strong>{upcoming}</strong></div><span className="trend neutral">Scheduled</span></div><div className="stat-card"><span className="stat-icon green"><Icon name="location" /></span><div><small>Locations</small><strong>{new Set(events.map((event) => event.location)).size}</strong></div><span className="trend neutral">All time</span></div></section><div className="overview-actions"><button className="primary" onClick={() => setPage("create")}><Icon name="plus" /> Create event</button><button className="secondary-action" onClick={() => setPage("events")}>View all events <Icon name="arrow" /></button></div></>;
   const selectedEvent = page.startsWith("event-") ? events.find((event) => String(event.id) === page.slice(6)) : null;
-  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
+  const content = page === "overview" ? overview : page === "create" ? <EventForm form={form} setForm={setForm} editingId={editingId} submit={submit} cancel={cancel} /> : page === "events" ? <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} /> : page === "calendar" ? <CalendarView events={events} openDetails={(id) => setPage(`event-${id}`)} /> : selectedEvent ? <EventDetails event={selectedEvent} goBack={() => setPage("events")} /> : <EventList events={events} loading={loading} edit={edit} remove={remove} openDetails={(id) => setPage(`event-${id}`)} />;
   if (!user) return <AuthPage onAuthenticated={setUser} />;
   return <Layout page={page} setPage={setPage} events={events} error={error} loadEvents={loadEvents} user={user} logout={() => { localStorage.removeItem("gatherly_token"); localStorage.removeItem("gatherly_user"); setUser(null); }} >{content}</Layout>;
 }
